@@ -44,6 +44,7 @@ public class TelegramApi extends TelegramLongPollingBot {
 
     public static final long ADMIN_CHAT_ID = 88403602;
     public static final long DMSOL_CHAT_ID = 73212301;
+    public static final int BOT_ID = 366958976;
 
     private final AppProperties appProperties;
     private final Keyboards keyboards;
@@ -187,8 +188,8 @@ public class TelegramApi extends TelegramLongPollingBot {
             Integer banVotes = actualVotes.getFirst();
             Integer notBanVotes = actualVotes.getSecond();
             sendEditMessageText(chatId, messageId, getVoteMessage(banVotes, notBanVotes), keyboards.getSpamVotingKeyboard());
-            if (banVotes - notBanVotes > 4) {
-                Message spamMessage = message.getReplyToMessage();
+            Message spamMessage = message.getReplyToMessage();
+            if (banVotes - notBanVotes > 4 && !spamMessage.getFrom().getId().equals(BOT_ID)) {
                 deleteMessage(chatId, spamMessage.getMessageId());
                 banUser(chatId, spamMessage.getFrom().getId());
             }
