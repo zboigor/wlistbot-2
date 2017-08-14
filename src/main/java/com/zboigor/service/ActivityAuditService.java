@@ -88,7 +88,7 @@ public class ActivityAuditService {
         @Scheduled(cron = "0 4 * * *") //every day in 4 am
         public void evict() {
             final Calendar instance = Calendar.getInstance();
-            instance.add(Calendar.DATE, - activityCheckDay + 1);
+            instance.add(Calendar.DATE, - activityCheckDay - 1);
             final Date date = new Date(instance.getTime().getTime());
             activityAuditRepository.deleteByDateBefore(date);
         }
