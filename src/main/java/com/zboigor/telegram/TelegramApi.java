@@ -71,7 +71,6 @@ public class TelegramApi extends TelegramLongPollingBot {
     public void onUpdateReceived(Update update) {
         if (update.hasMessage()) {
             Message message = update.getMessage();
-            String messageText = message.getText();
             Message replyToMessage = message.getReplyToMessage();
 
             if (!stopped) {
@@ -179,8 +178,11 @@ public class TelegramApi extends TelegramLongPollingBot {
         }
     }
 
-    private void processVote(String queryData, Long chatId, Integer messageId, Integer userId, CallbackQuery callbackQuery, Message message) {
-        if (BAN.equalsIgnoreCase(queryData) || NOT_BAN.equalsIgnoreCase(queryData)) {
+    private void processVote(String queryData, Long chatId, Integer messageId, Integer userId, CallbackQuery callbackQuery,
+                             Message message) {
+        Message spamMessage = message.getReplyToMessage();
+        if ((BAN.equalsIgnoreCase(queryData) || NOT_BAN.equalsIgnoreCase(queryData))
+                && !spamMessage.getFrom().getId().equals(userId)) {
             banVoteService.vote(chatId, messageId, userId, BAN.equals(queryData));
             sendCallbackQueryAnswer(callbackQuery.getId(), "Your vote accepted", false);
             Pair<Integer, Integer> actualVotes = banVoteService.getActualVotes(chatId, messageId);
@@ -188,7 +190,6 @@ public class TelegramApi extends TelegramLongPollingBot {
             Integer banVotes = actualVotes.getFirst();
             Integer notBanVotes = actualVotes.getSecond();
             sendEditMessageText(chatId, messageId, getVoteMessage(banVotes, notBanVotes), keyboards.getSpamVotingKeyboard());
-            Message spamMessage = message.getReplyToMessage();
             if (banVotes - notBanVotes > 4 && !spamMessage.getFrom().getId().equals(BOT_ID)) {
                 deleteMessage(chatId, spamMessage.getMessageId());
                 banUser(chatId, spamMessage.getFrom().getId());
