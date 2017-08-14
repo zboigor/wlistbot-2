@@ -15,6 +15,8 @@ public class AppProperties {
 
     private final Bot bot = new Bot();
     private final DB db = new DB();
+    private final int activityTime;
+    private final long sufficientActivity;
 
     @Data
     public static class Bot {
