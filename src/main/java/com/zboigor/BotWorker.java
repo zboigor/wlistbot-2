@@ -21,20 +21,14 @@ public class BotWorker implements ApplicationRunner {
     @Autowired
     private TelegramApi bot;
 
-    private BotSession botSession;
-
     @Override
     public void run(ApplicationArguments applicationArguments) throws Exception {
         try {
             TelegramBotsApi telegramBotsApi = new TelegramBotsApi();
-            botSession = telegramBotsApi.registerBot(bot);
+            telegramBotsApi.registerBot(bot);
         } catch (TelegramApiException e) {
-
+			throw new IllegalStateException(e);
         }
     }
 
-/*    @PreDestroy
-    public void tearDown() {
-        botSession.stop();
-    }*/
 }
