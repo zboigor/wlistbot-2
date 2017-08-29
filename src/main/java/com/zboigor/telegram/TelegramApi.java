@@ -1,5 +1,6 @@
 package com.zboigor.telegram;
 
+import com.zboigor.service.ActivityAuditService;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.api.methods.groupadministration.GetChatAdministrators;
@@ -50,16 +51,19 @@ public class TelegramApi extends TelegramLongPollingBot {
     private final Keyboards keyboards;
     private final BanVoteService banVoteService;
     private final SpamTriggerService spamTriggerService;
+    private final ActivityAuditService activityAuditService;
 
     private List<SpamTrigger> triggers;
 
     private boolean stopped = false;
 
-    public TelegramApi(AppProperties appProperties, Keyboards keyboards, BanVoteService banVoteService, SpamTriggerService spamTriggerService) {
+    public TelegramApi(AppProperties appProperties, Keyboards keyboards, BanVoteService banVoteService,
+                       SpamTriggerService spamTriggerService, ActivityAuditService activityAuditService) {
         this.appProperties = appProperties;
         this.keyboards = keyboards;
         this.banVoteService = banVoteService;
         this.spamTriggerService = spamTriggerService;
+        this.activityAuditService = activityAuditService;
     }
 
     @PostConstruct
@@ -80,6 +84,7 @@ public class TelegramApi extends TelegramLongPollingBot {
                     checkMessageForSpam(message);
                 }
             }
+            activityAuditService.audit(update.getMessage().getChatId(), update.getMessage().getFrom().getId());
             processStartStop(message);
         } else if (update.hasCallbackQuery()) {
             if (!stopped) {
@@ -173,8 +178,10 @@ public class TelegramApi extends TelegramLongPollingBot {
     private void processVoteActivation(Message message, Message replyToMessage) {
         String messageText = message.getText();
         if (replyToMessage != null && ("/spam".equalsIgnoreCase(messageText) || "/voteban".equalsIgnoreCase(messageText))) {
-            sendReplyMessageWithKeyboard(message.getChatId(), getVoteMessage(0, 0),
-                replyToMessage.getMessageId(), keyboards.getSpamVotingKeyboard());
+            if (checkActivity(message.getChatId(), replyToMessage.getFrom())) {
+                sendReplyMessageWithKeyboard(message.getChatId(), getVoteMessage(0, 0),
+                        replyToMessage.getMessageId(), keyboards.getSpamVotingKeyboard());
+            }
         }
     }
 
@@ -351,5 +358,10 @@ public class TelegramApi extends TelegramLongPollingBot {
     @Override
     public String getBotToken() {
         return appProperties.getBot().getToken();
+    }
+
+    private boolean checkActivity(Long chatId, User user) {
+        final Long latestActivityCount = activityAuditService.getLatestActivityCount(chatId, user.getId());
+        return latestActivityCount > appProperties.getSufficientActivity();
     }
 }
