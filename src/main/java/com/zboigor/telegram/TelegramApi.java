@@ -1,5 +1,12 @@
 package com.zboigor.telegram;
 
+import com.zboigor.config.AppProperties;
+import com.zboigor.model.SpamTrigger;
+import com.zboigor.model.Voting;
+import com.zboigor.service.BanVoteService;
+import com.zboigor.service.SpamTriggerService;
+import com.zboigor.service.VotingService;
+import com.zboigor.util.Pair;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.api.methods.groupadministration.GetChatAdministrators;
@@ -8,21 +15,12 @@ import org.telegram.telegrambots.api.methods.send.SendMessage;
 import org.telegram.telegrambots.api.methods.updatingmessages.DeleteMessage;
 import org.telegram.telegrambots.api.methods.updatingmessages.EditMessageReplyMarkup;
 import org.telegram.telegrambots.api.methods.updatingmessages.EditMessageText;
-import org.telegram.telegrambots.api.objects.CallbackQuery;
-import org.telegram.telegrambots.api.objects.ChatMember;
-import org.telegram.telegrambots.api.objects.Message;
-import org.telegram.telegrambots.api.objects.Update;
-import org.telegram.telegrambots.api.objects.User;
+import org.telegram.telegrambots.api.objects.*;
 import org.telegram.telegrambots.api.objects.replykeyboard.InlineKeyboardMarkup;
 import org.telegram.telegrambots.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.exceptions.TelegramApiException;
-import com.zboigor.config.AppProperties;
-import com.zboigor.model.SpamTrigger;
-import com.zboigor.service.BanVoteService;
-import com.zboigor.service.SpamTriggerService;
-import com.zboigor.util.Pair;
 
 import javax.annotation.PostConstruct;
 import java.io.PrintWriter;
@@ -45,24 +43,23 @@ public class TelegramApi extends TelegramLongPollingBot {
     public static final long ADMIN_CHAT_ID = 88403602;
     public static final long DMSOL_CHAT_ID = 73212301;
     public static final int BOT_ID = 366958976;
-
+    private static final String USER_LINK = "[%s](tg://user?id=%d)";
+    private static final String VOTE_BAN_MESSAGE = "Vote for ban.\nInitiator: %s";
     private final AppProperties appProperties;
     private final Keyboards keyboards;
     private final BanVoteService banVoteService;
     private final SpamTriggerService spamTriggerService;
-
-    private static final String USER_LINK = "[%s](tg://user?id=%d)";
-    private static final String VOTE_BAN_MESSAGE = "Vote for ban.\nInitiator: %s";
-
+    private final VotingService votingService;
     private List<SpamTrigger> triggers;
 
     private boolean stopped = false;
 
-    public TelegramApi(AppProperties appProperties, Keyboards keyboards, BanVoteService banVoteService, SpamTriggerService spamTriggerService) {
+    public TelegramApi(AppProperties appProperties, Keyboards keyboards, BanVoteService banVoteService, SpamTriggerService spamTriggerService, VotingService votingService) {
         this.appProperties = appProperties;
         this.keyboards = keyboards;
         this.banVoteService = banVoteService;
         this.spamTriggerService = spamTriggerService;
+        this.votingService = votingService;
     }
 
     @PostConstruct
@@ -102,6 +99,10 @@ public class TelegramApi extends TelegramLongPollingBot {
         return String.format(VOTE_BAN_MESSAGE, getUserName(user));
     }
 
+    private String getVoteMessage(String username, Integer id) {
+        return String.format(VOTE_BAN_MESSAGE, getUserName(username, id));
+    }
+
     private void processStartStop(Message message) {
         Long chatId = message.getChatId();
         Integer userId = message.getFrom().getId();
@@ -136,6 +137,10 @@ public class TelegramApi extends TelegramLongPollingBot {
 
     private String getUserName(User user) {
         return String.format(USER_LINK, user.getFirstName(), user.getId());
+    }
+
+    private String getUserName(String username, Integer id) {
+        return String.format(USER_LINK, username, id);
     }
 
     private boolean processTriggerAdding(Message message) {
@@ -174,11 +179,12 @@ public class TelegramApi extends TelegramLongPollingBot {
     }
 
     private void processVoteActivation(Message message, Message replyToMessage) {
-       String messageText = message.getText();
+        String messageText = message.getText();
         if (replyToMessage != null && ("/spam".equalsIgnoreCase(messageText) || "/voteban".equalsIgnoreCase(messageText))) {
-            sendReplyMessageWithKeyboard(message.getChatId(), getVoteMessage(message.getFrom()),
+            Message sentMessage = sendReplyMessageWithKeyboard(message.getChatId(), getVoteMessage(message.getFrom()),
                 replyToMessage.getMessageId(), keyboards.getSpamVotingKeyboard(1, 0));
-            banVoteService.vote(message.getChatId(), message.getMessageId(), message.getFrom().getId(), true);
+            banVoteService.vote(message.getChatId(), sentMessage.getMessageId(), message.getFrom().getId(), true);
+            votingService.save(message.getChatId(), sentMessage.getMessageId(), message.getFrom().getId(), message.getFrom().getFirstName());
         }
     }
 
@@ -186,14 +192,17 @@ public class TelegramApi extends TelegramLongPollingBot {
                              Message message) {
         Message spamMessage = message.getReplyToMessage();
         if ((BAN.equalsIgnoreCase(queryData) || NOT_BAN.equalsIgnoreCase(queryData))
-                && !spamMessage.getFrom().getId().equals(userId)) {
+            && !spamMessage.getFrom().getId().equals(userId)) {
             banVoteService.vote(chatId, messageId, userId, BAN.equals(queryData));
             sendCallbackQueryAnswer(callbackQuery.getId(), "Your vote accepted", false);
             Pair<Integer, Integer> actualVotes = banVoteService.getActualVotes(chatId, messageId);
 
             Integer banVotes = actualVotes.getFirst();
             Integer notBanVotes = actualVotes.getSecond();
-            sendEditMessageText(chatId, messageId, message.getText(), keyboards.getSpamVotingKeyboard(banVotes, notBanVotes));
+
+            Voting voting = votingService.find(callbackQuery.getMessage().getChatId(), callbackQuery.getMessage().getMessageId());
+
+            sendEditMessageText(chatId, messageId, getVoteMessage(voting.getInitiatorName(), voting.getInitiatorId()), keyboards.getSpamVotingKeyboard(banVotes, notBanVotes));
             if (banVotes - notBanVotes > 4 && !spamMessage.getFrom().getId().equals(BOT_ID)) {
                 deleteMessage(chatId, spamMessage.getMessageId());
                 banUser(chatId, spamMessage.getFrom().getId());
@@ -231,14 +240,14 @@ public class TelegramApi extends TelegramLongPollingBot {
         send(sendMessage);
     }
 
-    public void sendReplyMessageWithKeyboard(Long chatId, String messageText, Integer replyTo, ReplyKeyboard keyboard) {
+    public Message sendReplyMessageWithKeyboard(Long chatId, String messageText, Integer replyTo, ReplyKeyboard keyboard) {
         SendMessage sendMessage = new SendMessage()
             .setChatId(chatId)
             .setText(messageText)
             .setReplyMarkup(keyboard)
             .setReplyToMessageId(replyTo)
             .enableMarkdown(true);
-        send(sendMessage);
+        return send(sendMessage);
     }
 
     public void sendReplyMessage(Long chatId, String messageText, Integer replyTo) {

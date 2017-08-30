@@ -1,15 +1,12 @@
 package com.zboigor;
 
+import com.zboigor.telegram.TelegramApi;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 import org.telegram.telegrambots.TelegramBotsApi;
 import org.telegram.telegrambots.exceptions.TelegramApiException;
-import org.telegram.telegrambots.generics.BotSession;
-import com.zboigor.telegram.TelegramApi;
-
-import javax.annotation.PreDestroy;
 
 /**
  * @author Igor Zboichik
@@ -27,7 +24,7 @@ public class BotWorker implements ApplicationRunner {
             TelegramBotsApi telegramBotsApi = new TelegramBotsApi();
             telegramBotsApi.registerBot(bot);
         } catch (TelegramApiException e) {
-			throw new IllegalStateException(e);
+            throw new IllegalStateException(e);
         }
     }
 
