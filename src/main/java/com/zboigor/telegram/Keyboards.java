@@ -20,11 +20,11 @@ public class Keyboards {
         return Collections.singletonList(createInlineKeyboardButton(text, callback));
     }
 
-    public InlineKeyboardMarkup getSpamVotingKeyboard() {
+    public InlineKeyboardMarkup getSpamVotingKeyboard(final int banVotes, final int notBanVotes) {
         List<List<InlineKeyboardButton>> keys = new ArrayList<>();
         keys.add(Arrays.asList(
-            createInlineKeyboardButton("Ban", TelegramApi.BAN),
-            createInlineKeyboardButton("Not ban", TelegramApi.NOT_BAN)
+            createInlineKeyboardButton("Ban: " + banVotes, TelegramApi.BAN),
+            createInlineKeyboardButton("Not ban: " + notBanVotes, TelegramApi.NOT_BAN)
         ));
         return new InlineKeyboardMarkup().setKeyboard(keys);
     }

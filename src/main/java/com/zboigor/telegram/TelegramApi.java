@@ -51,6 +51,9 @@ public class TelegramApi extends TelegramLongPollingBot {
     private final BanVoteService banVoteService;
     private final SpamTriggerService spamTriggerService;
 
+    private static final String USER_LINK = "[%s](tg://user?id=%d)";
+    private static final String VOTE_BAN_MESSAGE = "Vote for ban.\nInitiator: %s";
+
     private List<SpamTrigger> triggers;
 
     private boolean stopped = false;
@@ -95,8 +98,8 @@ public class TelegramApi extends TelegramLongPollingBot {
         }
     }
 
-    private String getVoteMessage(int ban, int notBan) {
-        return "Vote for ban.\n\nBan: " + ban + "\nNot ban: " + notBan;
+    private String getVoteMessage(final User user) {
+        return String.format(VOTE_BAN_MESSAGE, getUserName(user));
     }
 
     private void processStartStop(Message message) {
@@ -132,7 +135,7 @@ public class TelegramApi extends TelegramLongPollingBot {
     }
 
     private String getUserName(User user) {
-        return "" + (user.getFirstName() != null ? user.getFirstName() : "") + " " + (user.getLastName() != null ? user.getLastName() : "");
+        return String.format(USER_LINK, user.getFirstName(), user.getId());
     }
 
     private boolean processTriggerAdding(Message message) {
@@ -171,10 +174,11 @@ public class TelegramApi extends TelegramLongPollingBot {
     }
 
     private void processVoteActivation(Message message, Message replyToMessage) {
-        String messageText = message.getText();
+       String messageText = message.getText();
         if (replyToMessage != null && ("/spam".equalsIgnoreCase(messageText) || "/voteban".equalsIgnoreCase(messageText))) {
-            sendReplyMessageWithKeyboard(message.getChatId(), getVoteMessage(0, 0),
-                replyToMessage.getMessageId(), keyboards.getSpamVotingKeyboard());
+            sendReplyMessageWithKeyboard(message.getChatId(), getVoteMessage(message.getFrom()),
+                replyToMessage.getMessageId(), keyboards.getSpamVotingKeyboard(1, 0));
+            banVoteService.vote(message.getChatId(), message.getMessageId(), message.getFrom().getId(), true);
         }
     }
 
@@ -189,7 +193,7 @@ public class TelegramApi extends TelegramLongPollingBot {
 
             Integer banVotes = actualVotes.getFirst();
             Integer notBanVotes = actualVotes.getSecond();
-            sendEditMessageText(chatId, messageId, getVoteMessage(banVotes, notBanVotes), keyboards.getSpamVotingKeyboard());
+            sendEditMessageText(chatId, messageId, message.getText(), keyboards.getSpamVotingKeyboard(banVotes, notBanVotes));
             if (banVotes - notBanVotes > 4 && !spamMessage.getFrom().getId().equals(BOT_ID)) {
                 deleteMessage(chatId, spamMessage.getMessageId());
                 banUser(chatId, spamMessage.getFrom().getId());
